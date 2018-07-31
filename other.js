@@ -1,7 +1,48 @@
 
-const express = require('express');
+
 const puppeteer = require('puppeteer');
 
+async function ssr3(url) {
+  const browser = await puppeteer.launch({headless: true});
+  const page = await browser.newPage();
+
+  // 1. Intercept network requests.
+  await page.setRequestInterception(true);
+
+ 
+  page.on('response', async resp => {
+     console.log("response " );
+    const responseUrl = resp.url();
+    console.log("response url " + responseUrl);
+    const sameOrigin = new URL(responseUrl).origin === new URL(url).origin;
+    const isStylesheet = resp.request().resourceType() === 'stylesheet';
+    console.log("is stylesheet" + isStylesheet);
+    if (sameOrigin && isStylesheet) {
+      stylesheetContents[responseUrl] = await resp.text();
+      console.log("stylesheet " +stylesheetContents[responseUrl]);
+    }
+   
+  });
+  await page.goto(url, {waitUntil: 'networkidle0'});
+
+  
+  // 3. Inline the CSS.
+  //Replace stylesheets in the page with their equivalent <style>.
+  await page.$$eval('link[rel="stylesheet"]', (links, content) => {
+    links.forEach(link => {
+      const cssText = content[link.href];
+      if (cssText) {
+        const style = document.createElement('style');
+        style.textContent = cssText;
+        link.replaceWith(style);
+      }
+    });
+  }, stylesheetContents);
+  const html = await page.content(); // serialized HTML of page DOM.
+  await browser.close();
+
+  return html;
+}
 
 async function ssr2(url) {
     const browser = await puppeteer.launch({headless: true});

@@ -4,55 +4,64 @@ const puppeteer = require('puppeteer');
 const app = express();
 const pageUrl = 'https://alpha.mouzenidis-travel.ru/reactssr/hottourspage';
 const pageUrl1 = 'https://alpha.mouzenidis-travel.ru/home/index3';
+//import urlModule from 'url';
+const urlModule = require('url');
 
-
-import urlModule from 'url';
 const URL = urlModule.URL;
+let browserWSEndpoint = null;
 
-async function ssr(url) {
-  ...
-  const stylesheetContents = {};
 
-  // 1. Stash the responses of local stylesheets.
-  page.on('response', async resp => {
-    const responseUrl = resp.url();
-    const sameOrigin = new URL(responseUrl).origin === new URL(url).origin;
-    const isStylesheet = resp.request().resourceType() === 'stylesheet';
-    if (sameOrigin && isStylesheet) {
-      stylesheetContents[responseUrl] = await resp.text();
+
+async function ssr(url, browserWSEndpoint) {
+
+  
+  console.info('Connecting to existing Chrome instance.');
+  const browser = await puppeteer.connect({browserWSEndpoint});
+
+ // const browser = await puppeteer.launch({headless: true});
+  const page = await browser.newPage();
+
+  // 1. Intercept network requests.
+  await page.setRequestInterception(true);
+
+  page.on('request', req => {
+    // 2. Ignore requests for resources that don't produce DOM
+    // (images, stylesheets, media).
+    const whitelist = ['document', 'script', 'xhr', 'fetch'];
+    if (!whitelist.includes(req.resourceType())) {
+      return req.abort();
     }
+
+    // 3. Pass through all other requests.
+    req.continue();
   });
 
-  // 2. Load page as normal, waiting for network requests to be idle.
   await page.goto(url, {waitUntil: 'networkidle0'});
-
-  // 3. Inline the CSS.
-  // Replace stylesheets in the page with their equivalent <style>.
-  await page.$$eval('link[rel="stylesheet"]', (links, content) => {
-    links.forEach(link => {
-      const cssText = content[link.href];
-      if (cssText) {
-        const style = document.createElement('style');
-        style.textContent = cssText;
-        link.replaceWith(style);
-      }
-    });
-  }, stylesheetContents);
-
-  // 4. Get updated serialized HTML of page.
-  const html = await page.content();
+  const html = await page.content(); // serialized HTML of page DOM.
   await browser.close();
 
-  return {html};
+  return html;
 }
 
 
 
 
-app.get('/', function (req, res) {
-    console.log("route index started");
-   
-     ssr(pageUrl1).then(html=>res.send(html)).catch(console.error);
+app.get('/',async (req, res, next)=> {
+  if (!browserWSEndpoint) {
+    const browser = await puppeteer.launch();
+    browserWSEndpoint = await browser.wsEndpoint();
+  }
+  try
+  {
+    const html = await ssr(pageUrl1, browserWSEndpoint);
+    return res.status(200).send(html);
+  }
+  catch(e)
+  {
+    return res.send(e);
+  }
+
+    // ssr(pageUrl1,browserWSEndpoint).then(html=>res.send(html)).catch(console.error);
      //res.send('Hello World 113!');
   });
   const port = process.env.PORT || 8080;
