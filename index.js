@@ -5,41 +5,48 @@ const app = express();
 const pageUrl = 'https://alpha.mouzenidis-travel.ru/reactssr/hottourspage';
 const pageUrl1 = 'https://alpha.mouzenidis-travel.ru/home/index3';
 
+
+import urlModule from 'url';
+const URL = urlModule.URL;
+
 async function ssr(url) {
-  const browser = await puppeteer.launch({headless: true});
-  const page = await browser.newPage();
+  ...
+  const stylesheetContents = {};
+
+  // 1. Stash the responses of local stylesheets.
+  page.on('response', async resp => {
+    const responseUrl = resp.url();
+    const sameOrigin = new URL(responseUrl).origin === new URL(url).origin;
+    const isStylesheet = resp.request().resourceType() === 'stylesheet';
+    if (sameOrigin && isStylesheet) {
+      stylesheetContents[responseUrl] = await resp.text();
+    }
+  });
+
+  // 2. Load page as normal, waiting for network requests to be idle.
   await page.goto(url, {waitUntil: 'networkidle0'});
-  const html = await page.content(); // serialized HTML of page DOM.
+
+  // 3. Inline the CSS.
+  // Replace stylesheets in the page with their equivalent <style>.
+  await page.$$eval('link[rel="stylesheet"]', (links, content) => {
+    links.forEach(link => {
+      const cssText = content[link.href];
+      if (cssText) {
+        const style = document.createElement('style');
+        style.textContent = cssText;
+        link.replaceWith(style);
+      }
+    });
+  }, stylesheetContents);
+
+  // 4. Get updated serialized HTML of page.
+  const html = await page.content();
   await browser.close();
-  return html;
+
+  return {html};
 }
 
 
-const rend=async () => {
-  console.log("async function called");
-  const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const page = await browser.newPage()
-  //await page.setViewport({ width: 1280, height: 800 })
-
-
-
-  await page.goto(pageUrl1, {waitUntil: 'networkidle0'})
-  const name = await page.content();//await page.evaluate(() => page.content())
- // console.log(name);
-  
-  // const name = await page.evaluate(() => document.querySelector('.hot-tours-react').innerText)
-  // console.log(name)
-
-  // const stories = await page.evaluate(() => {
-  //   const anchors = Array.from(document.querySelectorAll('a'))
-  //   return anchors.map(anchor => anchor.textContent).slice(0, 10)
-  // })
-  // console.log(stories)
-  // const title = await page.title()
-  // console.log(title + " title")
-  await browser.close()
-  return name;
-};
 
 
 app.get('/', function (req, res) {
