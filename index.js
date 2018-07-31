@@ -12,34 +12,33 @@ let browserWSEndpoint = null;
 
 
 
-async function ssr(url, browserWSEndpoint) {
+async function ssr(url) {
 
   
-  console.info('Connecting to existing Chrome instance.');
-  const browser = await puppeteer.connect({browserWSEndpoint});
+  // console.info('Connecting to existing Chrome instance.');
+  // const browser = await puppeteer.connect({browserWSEndpoint});
 
- // const browser = await puppeteer.launch({headless: true});
+ const browser = await puppeteer.launch({headless: true});
   const page = await browser.newPage();
 
   // 1. Intercept network requests.
-  await page.setRequestInterception(true);
+  //await page.setRequestInterception(true);
 
-  page.on('request', req => {
-    // 2. Ignore requests for resources that don't produce DOM
-    // (images, stylesheets, media).
-    const whitelist = ['document', 'script', 'xhr', 'fetch'];
-    if (!whitelist.includes(req.resourceType())) {
-      return req.abort();
-    }
+  // page.on('request', req => {
+  //   // 2. Ignore requests for resources that don't produce DOM
+  //   // (images, stylesheets, media).
+  //   const whitelist = ['document', 'script', 'xhr', 'fetch'];
+  //   if (!whitelist.includes(req.resourceType())) {
+  //     return req.abort();
+  //   }
 
-    // 3. Pass through all other requests.
-    req.continue();
-  });
+  //   // 3. Pass through all other requests.
+  //   req.continue();
+  // });
 
   await page.goto(url, {waitUntil: 'networkidle0'});
   const html = await page.content(); // serialized HTML of page DOM.
   await browser.close();
-
   return html;
 }
 
@@ -47,13 +46,14 @@ async function ssr(url, browserWSEndpoint) {
 
 
 app.get('/',async (req, res, next)=> {
-  if (!browserWSEndpoint) {
-    const browser = await puppeteer.launch();
-    browserWSEndpoint = await browser.wsEndpoint();
-  }
+  // if (!browserWSEndpoint) {
+  //   const browser = await puppeteer.launch();
+  //   browserWSEndpoint = await browser.wsEndpoint();
+  // }
   try
   {
-    const html = await ssr(pageUrl1, browserWSEndpoint);
+    console.log("page " + pageUrl);
+    const html = await ssr(pageUrl);
     return res.status(200).send(html);
   }
   catch(e)
